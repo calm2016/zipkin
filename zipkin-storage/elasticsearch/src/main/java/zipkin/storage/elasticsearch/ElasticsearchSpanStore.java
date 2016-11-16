@@ -75,7 +75,7 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
         .must(rangeQuery("timestamp_millis")
             .gte(beginMillis)
             .lte(endMillis));
-    if (request.serviceName != null || request.serviceName.equalsIgnoreCase("all")) {
+    if (request.serviceName != null && !request.serviceName.equalsIgnoreCase("all")) {
       filter.must(boolQuery()
           .should(nestedQuery(
               "annotations", termQuery("annotations.endpoint.serviceName", request.serviceName)))
@@ -90,7 +90,7 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
       BoolQueryBuilder annotationQuery = boolQuery()
           .must(termQuery("annotations.value", annotation));
 
-      if (request.serviceName != null) {
+      if (request.serviceName != null && !request.serviceName.equalsIgnoreCase("all")) {
         annotationQuery.must(termQuery("annotations.endpoint.serviceName", request.serviceName));
       }
 
@@ -104,7 +104,7 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
           .must(termQuery("binaryAnnotations.key", kv.getKey()))
           .must(termQuery("binaryAnnotations.value", kv.getValue()));
 
-      if (request.serviceName != null) {
+      if (request.serviceName != null && !request.serviceName.equalsIgnoreCase("all")) {
         binaryAnnotationQuery.must(
             termQuery("binaryAnnotations.endpoint.serviceName", request.serviceName));
       }
