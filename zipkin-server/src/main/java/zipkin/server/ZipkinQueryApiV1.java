@@ -15,6 +15,8 @@ package zipkin.server;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
@@ -73,6 +75,11 @@ public class ZipkinQueryApiV1 {
   @RequestMapping(value = "/services", method = RequestMethod.GET)
   public ResponseEntity<List<String>> getServiceNames() {
     List<String> serviceNames = storage.spanStore().getServiceNames();
+    if (serviceNames != null) {
+      serviceNames.add("all");
+      serviceNames = serviceNames.stream().filter(name -> !name.startsWith("/api")).collect(Collectors.toList());
+    }
+
     serviceCount = serviceNames.size();
     return maybeCacheNames(serviceNames);
   }
