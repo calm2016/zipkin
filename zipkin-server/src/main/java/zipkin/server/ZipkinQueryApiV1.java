@@ -76,8 +76,8 @@ public class ZipkinQueryApiV1 {
   public ResponseEntity<List<String>> getServiceNames() {
     List<String> serviceNames = storage.spanStore().getServiceNames();
     if (serviceNames != null) {
-      serviceNames.add("all");
       serviceNames = serviceNames.stream().filter(name -> !name.startsWith("/api")).collect(Collectors.toList());
+      serviceNames.add("all");
     }
 
     serviceCount = serviceNames.size();
