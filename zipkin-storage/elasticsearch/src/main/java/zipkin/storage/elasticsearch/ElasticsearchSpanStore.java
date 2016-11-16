@@ -75,8 +75,7 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
         .must(rangeQuery("timestamp_millis")
             .gte(beginMillis)
             .lte(endMillis));
-
-    if (request.serviceName != null) {
+    if (request.serviceName != null || request.serviceName.equalsIgnoreCase("all")) {
       filter.must(boolQuery()
           .should(nestedQuery(
               "annotations", termQuery("annotations.endpoint.serviceName", request.serviceName)))
