@@ -249,8 +249,9 @@ export function traceSummariesToMustache(serviceName = null, traceSummaries, utc
       const durationStr = mkDurationStr(t.duration);
       var servicePercentage = 100;
       if (t.duration > 0) {
+
         servicePercentage = parseInt(
-                parseFloat(serviceTime) / parseFloat(t_duration) * 100,
+                parseFloat(serviceTime) / parseFloat(t.duration) * 100,
               10);
       }
       const spanCount = _(groupedTimestamps).values().sumBy((sts) => sts.length);
