@@ -136,11 +136,13 @@ export default function traceToMustache(trace) {
 
       var spanName = span.name;
       if (span.name == 'asyncrequest') {
-        var msg = binaryAnnotations.filter(a => a.key=='X-Message-ID')[1];
+        var msg = binaryAnnotations.filter(
+            a => (a.key=='X-Message-Status' || a.key=='X-Message-ID')
+            && msg.value && msg.value.indexOf('@')>0 )[0];
         if(msg) {
-            spanName = msg.value
+            spanName = msg.value.substring(0, msg.value.indexOf('@')-1)
         }
-      } 
+      }
 
       if (errorType !== 'critical') {
         if (_(span.annotations || []).findIndex(ann => ann.value === Constants.ERROR) !== -1) {
