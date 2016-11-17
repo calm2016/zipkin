@@ -87,7 +87,7 @@
   <ul id="traces">
   {{#traces}}
     <li class="trace {{infoClass}}" data-traceId="{{traceId}}" data-duration="{{duration}}" data-timestamp="{{timestamp}}" data-service-percentage="{{servicePercentage}}">
-      <a href="/traces/{{traceId}}?serviceName={{serviceName}}">
+      <a href="/traces/{{traceId}}?serviceName={{traceServiceName}}">
         <div class="bar-block">
           <span class="bar-graphic" style="width:{{width}}%;"></span>
           <span class="bar-label">{{durationStr}}</span>
@@ -95,7 +95,7 @@
         </div>
         <div class="bar-block">
           <span class="bar-graphic" style="width:{{servicePercentage}}%;"></span>
-          <span class="bar-label">{{serviceName}} {{servicePercentage}}%</span>
+          <span class="bar-label">{{traceServiceName}} {{servicePercentage}}%</span>
         </div>
       </a>
       <div class="trace-details services">

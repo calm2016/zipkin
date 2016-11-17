@@ -157,13 +157,18 @@ export function traceSummary(spans = []) {
     const timestamp = spans[0].timestamp;
     const spanTimestamps = getSpanTimestamps(spans);
     const errorType = getTraceErrorType(spans);
+    const traceServiceName = null;
+    if (spans[0].annotations.length > 0) {
+        traceServiceName = spans[0].annotations[0].endpoint.serviceName;
+    }
     return {
       traceId,
       timestamp,
       duration,
       spanTimestamps,
       endpoints,
-      errorType
+      errorType,
+      traceServiceName
     };
   }
 }
@@ -228,12 +233,16 @@ export function traceSummariesToMustache(serviceName = null, traceSummaries, utc
       const duration = t.duration / 1000;
       const groupedTimestamps = getGroupedTimestamps(t);
       const serviceDurations = getServiceDurations(groupedTimestamps);
+      const traceServiceName = t.traceServiceName;
+      if (traceServiceName == null) {
+         traceServiceName = serviceName
+      }
 
       let serviceTime;
-      if (!serviceName || !groupedTimestamps[serviceName]) {
+      if (!traceServiceName || !groupedTimestamps[traceServiceName]) {
         serviceTime = 0;
       } else {
-        serviceTime = totalServiceTime(groupedTimestamps[serviceName]);
+        serviceTime = totalServiceTime(groupedTimestamps[traceServiceName]);
       }
 
       const startTs = formatDate(t.timestamp, utc);
@@ -255,7 +264,8 @@ export function traceSummariesToMustache(serviceName = null, traceSummaries, utc
         spanCount,
         serviceDurations,
         width,
-        infoClass
+        infoClass,
+        traceServiceName
       };
     }).sort((t1, t2) => {
       const durationComparison = t2.duration - t1.duration;
