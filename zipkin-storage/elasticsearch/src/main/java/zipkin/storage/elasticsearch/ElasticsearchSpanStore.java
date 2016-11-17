@@ -75,7 +75,7 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
         .must(rangeQuery("timestamp_millis")
             .gte(beginMillis)
             .lte(endMillis));
-    if (request.serviceName != null && !request.serviceName.equalsIgnoreCase("all")) {
+    if (!isAll(request.serviceName)) {
       filter.must(boolQuery()
           .should(nestedQuery(
               "annotations", termQuery("annotations.endpoint.serviceName", request.serviceName)))
@@ -90,7 +90,7 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
       BoolQueryBuilder annotationQuery = boolQuery()
           .must(termQuery("annotations.value", annotation));
 
-      if (request.serviceName != null && !request.serviceName.equalsIgnoreCase("all")) {
+      if (!isAll(request.serviceName)) {
         annotationQuery.must(termQuery("annotations.endpoint.serviceName", request.serviceName));
       }
 
@@ -104,7 +104,7 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
           .must(termQuery("binaryAnnotations.key", kv.getKey()))
           .must(termQuery("binaryAnnotations.value", kv.getValue()));
 
-      if (request.serviceName != null && !request.serviceName.equalsIgnoreCase("all")) {
+      if (!isAll(request.serviceName)) {
         binaryAnnotationQuery.must(
             termQuery("binaryAnnotations.endpoint.serviceName", request.serviceName));
       }
@@ -145,6 +145,10 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
           }
         }
     );
+  }
+
+  private boolean isAll(String serviceName) {
+    return Strings.isNullOrEmpty(serviceName) || serviceName.equalsIgnoreCase("all");
   }
 
   @Override public ListenableFuture<List<Span>> getTrace(long traceId) {
@@ -205,17 +209,15 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
   }
 
   @Override public ListenableFuture<List<String>> getSpanNames(String serviceName) {
-    if (Strings.isNullOrEmpty(serviceName)) {
-      return EMPTY_LIST;
+    QueryBuilder filter = boolQuery();
+    if (!isAll(serviceName)) {
+      serviceName = serviceName.toLowerCase();
+      filter = boolQuery()
+              .should(nestedQuery(
+                      "annotations", termQuery("annotations.endpoint.serviceName", serviceName)))
+              .should(nestedQuery(
+                      "binaryAnnotations", termQuery("binaryAnnotations.endpoint.serviceName", serviceName)));
     }
-    serviceName = serviceName.toLowerCase();
-
-    QueryBuilder filter = boolQuery()
-        .should(nestedQuery(
-            "annotations", termQuery("annotations.endpoint.serviceName", serviceName)))
-        .should(nestedQuery(
-            "binaryAnnotations", termQuery("binaryAnnotations.endpoint.serviceName", serviceName)));
-
     return client.collectBucketKeys(catchAll,
         boolQuery().must(matchAllQuery()).filter(filter),
         AggregationBuilders.terms("name_agg")
