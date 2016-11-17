@@ -24,10 +24,10 @@ const DefaultPageComponent = component(function DefaultPage() {
 
     this.on(document, 'defaultPageModelView', function(ev, modelView) {
       const limit = query.limit || this.attr.config('queryLimit');
-      const minDuration = query.minDuration;
+      const minDuration = query.minDuration || 2000;
       const endTs = query.endTs || new Date().getTime();
       const startTs = query.startTs || (endTs - this.attr.config('defaultLookback'));
-      const serviceName = query.serviceName || '';
+      const serviceName = query.serviceName || 'all';
       const annotationQuery = query.annotationQuery || '';
       const queryWasPerformed = serviceName && serviceName.length > 0;
       this.$node.html(defaultTemplate({

@@ -2,7 +2,7 @@ import $ from 'jquery';
 
 const defaults = {
   environment: '',
-  queryLimit: 10,
+  queryLimit: 20,
   defaultLookback: 60 * 60 * 1000 // 1 hour
 };
 
