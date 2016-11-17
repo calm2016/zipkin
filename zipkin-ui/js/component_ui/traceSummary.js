@@ -157,7 +157,7 @@ export function traceSummary(spans = []) {
     const timestamp = spans[0].timestamp;
     const spanTimestamps = getSpanTimestamps(spans);
     const errorType = getTraceErrorType(spans);
-    const traceServiceName = null;
+    var traceServiceName = null;
     if (spans[0].annotations.length > 0) {
         traceServiceName = spans[0].annotations[0].endpoint.serviceName;
     }
@@ -233,7 +233,7 @@ export function traceSummariesToMustache(serviceName = null, traceSummaries, utc
       const duration = t.duration / 1000;
       const groupedTimestamps = getGroupedTimestamps(t);
       const serviceDurations = getServiceDurations(groupedTimestamps);
-      const traceServiceName = t.traceServiceName;
+      var traceServiceName = t.traceServiceName;
       if (traceServiceName == null) {
          traceServiceName = serviceName
       }
