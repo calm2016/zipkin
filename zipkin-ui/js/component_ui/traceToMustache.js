@@ -138,7 +138,7 @@ export default function traceToMustache(trace) {
       if (span.name == 'asyncrequest') {
         var msg = binaryAnnotations.filter(
             a => (a.key=='X-Message-Status' || a.key=='X-Message-ID')
-            && msg.value && msg.value.indexOf('@')>0 )[0];
+            && a.value && a.value.indexOf('@')>0 )[0];
         if(msg) {
             spanName = msg.value.substring(0, msg.value.indexOf('@')-1)
         }
