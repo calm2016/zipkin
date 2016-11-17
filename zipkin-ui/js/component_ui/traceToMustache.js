@@ -134,6 +134,14 @@ export default function traceToMustache(trace) {
         }
       });
 
+      var spanName = span.name;
+      if (span.name == 'asyncrequest') {
+        var msg = binaryAnnotations.filter(a => a.key=='X-Message-ID')[1];
+        if(msg) {
+            spanName = msg.value
+        }
+      } 
+
       if (errorType !== 'critical') {
         if (_(span.annotations || []).findIndex(ann => ann.value === Constants.ERROR) !== -1) {
           errorType = 'transient';
@@ -153,7 +161,7 @@ export default function traceToMustache(trace) {
       return {
         spanId: span.id,
         parentId: span.parentId || null,
-        spanName: span.name,
+        spanName: spanName,
         serviceNames: getServiceNames(span).join(','),
         serviceName: getServiceName(span) || '',
         duration: span.duration,
