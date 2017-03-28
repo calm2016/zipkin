@@ -48,7 +48,7 @@
           <npmVersion>3.10.9</npmVersion>
         </configuration>
         <executions>
-          <execution>
+          <!--<execution>
             <id>install node and npm</id>
             <goals>
               <goal>install-node-and-npm</goal>
@@ -62,7 +62,7 @@
             <configuration>
               <arguments>install</arguments>
             </configuration>
-          </execution>
+          </execution>-->
           <!--<execution>-->
             <!--<id>npm lint</id>-->
             <!--<goals>-->
@@ -73,6 +73,7 @@
               <!--<arguments>run lint</arguments>-->
             <!--</configuration>-->
           <!--</execution>-->
+          <!--
           <execution>
             <id>npm run build</id>
             <goals>
@@ -82,7 +83,7 @@
             <configuration>
               <arguments>run build</arguments>
             </configuration>
-          </execution>
+          </execution>-->
           <execution>
             <id>npm run test</id>
             <goals>
