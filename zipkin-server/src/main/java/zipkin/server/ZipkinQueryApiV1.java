@@ -100,6 +100,14 @@ public class ZipkinQueryApiV1 {
       @RequestParam(value = "endTs", required = false) Long endTs,
       @RequestParam(value = "lookback", required = false) Long lookback,
       @RequestParam(value = "limit", required = false) Integer limit) {
+
+    if ("all".equalsIgnoreCase(serviceName)) {
+      serviceName = null;
+    }
+    if ("all".equalsIgnoreCase(spanName)) {
+      spanName = null;
+    }
+
     QueryRequest queryRequest = QueryRequest.builder()
         .serviceName(serviceName)
         .spanName(spanName)
