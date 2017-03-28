@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -45,7 +45,7 @@ public final class CorrectForClockSkew {
       if (s.parentId == null) {
         Node<Span> tree = Node.constructTree(spans);
         adjust(tree, null);
-        List<Span> result = new ArrayList<Span>(spans.size());
+        List<Span> result = new ArrayList<>(spans.size());
         for (Iterator<Node<Span>> i = tree.traverse(); i.hasNext();) {
           result.add(i.next().value());
         }
@@ -70,27 +70,62 @@ public final class CorrectForClockSkew {
     if (skew != null) {
       // the current span's skew may be a different endpoint than skewFromParent, adjust again.
       node.value(adjustTimestamps(node.value(), skew));
-
-      // propagate skew to any children
-      for (Node<Span> child : node.children()) {
-        adjust(child, skew);
+    } else {
+      if (skewFromParent != null && isLocalSpan(node.value())) {
+        //Propagate skewFromParent to local spans
+         skew = skewFromParent;
       }
     }
+    // propagate skew to any children
+    for (Node<Span> child : node.children()) {
+      adjust(child, skew);
+    }
+  }
+
+  static boolean isLocalSpan(Span span) {
+    Endpoint endPoint = null;
+    for (int i = 0, length = span.annotations.size(); i < length; i++) {
+      Annotation annotation = span.annotations.get(i);
+      if (endPoint == null) {
+        endPoint = annotation.endpoint;
+      }
+      if (endPoint != null && !endPoint.equals(annotation.endpoint)) {
+        return false;
+      }
+    }
+    for (int i = 0, length = span.binaryAnnotations.size(); i < length; i++) {
+      BinaryAnnotation binaryAnnotation = span.binaryAnnotations.get(i);
+      if (endPoint == null) {
+        endPoint = binaryAnnotation.endpoint;
+      }
+      if (endPoint != null && !endPoint.equals(binaryAnnotation.endpoint)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** If any annotation has an IP with skew associated, adjust accordingly. */
   static Span adjustTimestamps(Span span, ClockSkew skew) {
     List<Annotation> annotations = null;
+    Long annotationTimestamp = null;
     for (int i = 0, length = span.annotations.size(); i < length; i++) {
       Annotation a = span.annotations.get(i);
       if (a.endpoint == null) continue;
       if (ipsMatch(skew.endpoint, a.endpoint)) {
-        if (annotations == null) annotations = new ArrayList<Annotation>(span.annotations);
+        if (annotations == null) annotations = new ArrayList<>(span.annotations);
+        if (span.timestamp!= null && a.timestamp == span.timestamp) {
+          annotationTimestamp = a.timestamp;
+        }
         annotations.set(i, a.toBuilder().timestamp(a.timestamp - skew.skew).build());
       }
     }
     if (annotations != null) {
-      return span.toBuilder().timestamp(annotations.get(0).timestamp).annotations(annotations).build();
+      Span.Builder builder = span.toBuilder().annotations(annotations);
+      if (annotationTimestamp != null) {
+        builder.timestamp(annotationTimestamp - skew.skew);
+      }
+      return builder.build();
     }
     // Search for a local span on the skewed endpoint
     for (int i = 0, length = span.binaryAnnotations.size(); i < length; i++) {
@@ -113,30 +148,34 @@ public final class CorrectForClockSkew {
   static ClockSkew getClockSkew(Span span) {
     Map<String, Annotation> annotations = asMap(span.annotations);
 
-    Long clientSend = getTimestamp(annotations, Constants.CLIENT_SEND);
-    Long clientRecv = getTimestamp(annotations, Constants.CLIENT_RECV);
-    Long serverRecv = getTimestamp(annotations, Constants.SERVER_RECV);
-    Long serverSend = getTimestamp(annotations, Constants.SERVER_SEND);
+    Annotation clientSend = annotations.get(Constants.CLIENT_SEND);
+    Annotation clientRecv = annotations.get(Constants.CLIENT_RECV);
+    Annotation serverRecv = annotations.get(Constants.SERVER_RECV);
+    Annotation serverSend = annotations.get(Constants.SERVER_SEND);
 
     if (clientSend == null || clientRecv == null || serverRecv == null || serverSend == null) {
       return null;
     }
 
-    Endpoint server = annotations.get(Constants.SERVER_RECV).endpoint;
-    server = server == null ? annotations.get(Constants.SERVER_SEND).endpoint : server;
+    Endpoint server = serverRecv.endpoint != null ? serverRecv.endpoint: serverSend.endpoint;
     if (server == null) return null;
+    Endpoint client = clientSend.endpoint != null ? clientSend.endpoint: clientRecv.endpoint;
+    if (client == null) return null;
 
-    long clientDuration = clientRecv - clientSend;
-    long serverDuration = serverSend - serverRecv;
+    // There's no skew if the RPC is going to itself
+    if (ipsMatch(server, client)) return null;
 
-    // There is only clock skew if CS is after SR or CR is before SS
-    boolean csAhead = clientSend < serverRecv;
-    boolean crAhead = clientRecv > serverSend;
-    if (serverDuration > clientDuration || (csAhead && crAhead)) {
-      return null;
-    }
+    long clientDuration = clientRecv.timestamp - clientSend.timestamp;
+    long serverDuration = serverSend.timestamp - serverRecv.timestamp;
+    // We assume latency is half the difference between the client and server duration.
+    // This breaks if client duration is smaller than server (due to async return for example).
+    if (clientDuration < serverDuration) return null;
+
     long latency = (clientDuration - serverDuration) / 2;
-    long skew = serverRecv - latency - clientSend;
+    // We can't see skew when send happens before receive
+    if (latency < 0) return null;
+
+    long skew = serverRecv.timestamp - latency - clientSend.timestamp;
     if (skew != 0L) {
       return new ClockSkew(server, skew);
     }
@@ -145,17 +184,11 @@ public final class CorrectForClockSkew {
 
   /** Get the annotations as a map with value to annotation bindings. */
   static Map<String, Annotation> asMap(List<Annotation> annotations) {
-    Map<String, Annotation> result = new LinkedHashMap<String, Annotation>(annotations.size());
+    Map<String, Annotation> result = new LinkedHashMap<>(annotations.size());
     for (Annotation a : annotations) {
       result.put(a.value, a);
     }
     return result;
-  }
-
-  @Nullable
-  static Long getTimestamp(Map<String, Annotation> annotations, String value) {
-    Annotation result = annotations.get(value);
-    return result != null ? result.timestamp : null;
   }
 
   private CorrectForClockSkew() {

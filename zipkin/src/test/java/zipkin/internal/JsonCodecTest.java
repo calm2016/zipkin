@@ -178,6 +178,58 @@ public final class JsonCodecTest extends CodecTest {
   }
 
   @Test
+  public void doesntStackOverflowOnToBufferWriterBug_lessThanBytes() {
+    thrown.expect(AssertionError.class);
+    thrown.expectMessage("Bug found using FooWriter to write Foo as json. Wrote 1/2 bytes: a");
+
+    class FooWriter implements Buffer.Writer {
+      @Override public int sizeInBytes(Object value) {
+        return 2;
+      }
+
+      @Override public void write(Object value, Buffer buffer) {
+        buffer.writeByte('a');
+        throw new RuntimeException("buggy");
+      }
+    }
+
+    class Foo {
+      @Override
+      public String toString() {
+        return new String(JsonCodec.write(new FooWriter(), this), UTF_8);
+      }
+    }
+
+    new Foo().toString();
+  }
+
+  @Test
+  public void doesntStackOverflowOnToBufferWriterBug_Overflow() {
+    thrown.expect(AssertionError.class);
+    thrown.expectMessage("Bug found using FooWriter to write Foo as json. Wrote 2/2 bytes: ab");
+
+    // pretend there was a bug calculating size, ex it calculated incorrectly as to small
+    class FooWriter implements Buffer.Writer {
+      @Override public int sizeInBytes(Object value) {
+        return 2;
+      }
+
+      @Override public void write(Object value, Buffer buffer) {
+        buffer.writeByte('a').writeByte('b').writeByte('c'); // wrote larger than size!
+      }
+    }
+
+    class Foo {
+      @Override
+      public String toString() {
+        return new String(JsonCodec.write(new FooWriter(), this), UTF_8);
+      }
+    }
+
+    new Foo().toString();
+  }
+
+  @Test
   public void niceErrorOnNull_id() {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Expected a string but was NULL");
@@ -316,6 +368,44 @@ public final class JsonCodecTest extends CodecTest {
         .isNull();
     assertThat(span.binaryAnnotations.get(0).endpoint.ipv4)
         .isEqualTo((192 << 24) | (0 << 16) | (2 << 8) | 128); // 192.0.2.128
+  }
+
+  @Test
+  public void missingKey() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("No key at $.binaryAnnotations[0]");
+
+    String json = "{\n"
+        + "  \"traceId\": \"6b221d5bc9e6496c\",\n"
+        + "  \"name\": \"get-traces\",\n"
+        + "  \"id\": \"6b221d5bc9e6496c\",\n"
+        + "  \"binaryAnnotations\": [\n"
+        + "    {\n"
+        + "      \"value\": \"bar\"\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    Codec.JSON.readSpan(json.getBytes(UTF_8));
+  }
+
+  @Test
+  public void missingValue() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("No value for key foo at $.binaryAnnotations[0]");
+
+    String json = "{\n"
+        + "  \"traceId\": \"6b221d5bc9e6496c\",\n"
+        + "  \"name\": \"get-traces\",\n"
+        + "  \"id\": \"6b221d5bc9e6496c\",\n"
+        + "  \"binaryAnnotations\": [\n"
+        + "    {\n"
+        + "      \"key\": \"foo\"\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    Codec.JSON.readSpan(json.getBytes(UTF_8));
   }
 
   @Test

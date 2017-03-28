@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -21,7 +21,6 @@ import org.junit.Test;
 import zipkin.Annotation;
 import zipkin.Codec;
 import zipkin.Span;
-import zipkin.storage.elasticsearch.http.HttpElasticsearchTestGraph;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.elasticsearch.index.query.QueryBuilders.matchAllQuery;
@@ -32,17 +31,16 @@ import static zipkin.TestObjects.DAY;
 import static zipkin.TestObjects.TODAY;
 import static zipkin.TestObjects.WEB_ENDPOINT;
 
-public class ElasticsearchSpanConsumerTest {
+@Deprecated
+abstract class ElasticsearchSpanConsumerTest {
 
-  private final ElasticsearchStorage storage;
+  /** Should maintain state between multiple calls within a test. */
+  protected abstract ElasticsearchStorage storage();
 
-  public ElasticsearchSpanConsumerTest() {
-    this.storage = HttpElasticsearchTestGraph.INSTANCE.storage.get();
-  }
-
+  /** Clears store between tests. */
   @Before
   public void clear() throws IOException {
-    storage.clear();
+    storage().clear();
   }
 
   @Test
@@ -56,8 +54,8 @@ public class ElasticsearchSpanConsumerTest {
 
     accept(span);
 
-    List<Span> indexFromTwoDaysAgo = storage.client()
-        .findSpans(new String[] {storage.indexNameFormatter.indexNameForTimestamp(twoDaysAgo)},
+    List<Span> indexFromTwoDaysAgo = storage().client()
+        .findSpans(new String[] {storage().indexNameFormatter.indexNameForTimestamp(twoDaysAgo)},
             matchAllQuery())
         .get();
 
@@ -75,8 +73,8 @@ public class ElasticsearchSpanConsumerTest {
 
     accept(span);
 
-    List<Span> indexFromTwoDaysAgo = storage.client()
-        .findSpans(new String[] {storage.indexNameFormatter.indexNameForTimestamp(twoDaysAgo)},
+    List<Span> indexFromTwoDaysAgo = storage().client()
+        .findSpans(new String[] {storage().indexNameFormatter.indexNameForTimestamp(twoDaysAgo)},
             matchAllQuery())
         .get();
 
@@ -91,8 +89,8 @@ public class ElasticsearchSpanConsumerTest {
 
     accept(span);
 
-    List<Span> indexFromToday = storage.client()
-        .findSpans(new String[] {storage.indexNameFormatter.indexNameForTimestamp(TODAY)},
+    List<Span> indexFromToday = storage().client()
+        .findSpans(new String[] {storage().indexNameFormatter.indexNameForTimestamp(TODAY)},
             matchAllQuery())
         .get();
 
@@ -107,8 +105,8 @@ public class ElasticsearchSpanConsumerTest {
 
     accept(span);
 
-    List<Span> indexFromToday = storage.client()
-        .findSpans(new String[] {storage.indexNameFormatter.indexNameForTimestamp(TODAY)},
+    List<Span> indexFromToday = storage().client()
+        .findSpans(new String[] {storage().indexNameFormatter.indexNameForTimestamp(TODAY)},
             termQuery("timestamp_millis", TODAY))
         .get();
 
@@ -133,6 +131,6 @@ public class ElasticsearchSpanConsumerTest {
   }
 
   void accept(Span span) throws Exception {
-    storage.guavaSpanConsumer().accept(ImmutableList.of(span)).get();
+    storage().guavaSpanConsumer().accept(ImmutableList.of(span)).get();
   }
 }

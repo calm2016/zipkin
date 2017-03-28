@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -39,6 +39,7 @@ public final class Node<V> {
   private V value;
   /** mutable to avoid allocating lists for childless nodes */
   private List<Node<V>> children = Collections.emptyList();
+  private boolean missingRootDummyNode;
 
   /** Returns the parent, or null if root */
   @Nullable
@@ -57,7 +58,7 @@ public final class Node<V> {
 
   public Node<V> addChild(Node<V> child) {
     child.parent = this;
-    if (children.equals(Collections.emptyList())) children = new LinkedList<Node<V>>();
+    if (children.equals(Collections.emptyList())) children = new LinkedList<>();
     children.add(child);
     return this;
   }
@@ -69,11 +70,15 @@ public final class Node<V> {
 
   /** Traverses the tree, breadth-first. */
   public Iterator<Node<V>> traverse() {
-    return new BreadthFirstIterator<V>(this);
+    return new BreadthFirstIterator<>(this);
+  }
+
+  public boolean isSyntheticRootForPartialTree() {
+    return missingRootDummyNode;
   }
 
   static final class BreadthFirstIterator<V> implements Iterator<Node<V>> {
-    private final Queue<Node<V>> queue = new ArrayDeque<Node<V>>();
+    private final Queue<Node<V>> queue = new ArrayDeque<>();
 
     BreadthFirstIterator(Node<V> root) {
       queue.add(root);
@@ -101,7 +106,7 @@ public final class Node<V> {
    * @param trace spans that belong to the same {@link Span#traceId trace}, in any order.
    */
   static Node<Span> constructTree(List<Span> trace) {
-    TreeBuilder<Span> treeBuilder = new TreeBuilder<Span>();
+    TreeBuilder<Span> treeBuilder = new TreeBuilder<>();
     for (Span s : trace) {
       treeBuilder.addNode(s.parentId, s.id, s);
     }
@@ -118,14 +123,21 @@ public final class Node<V> {
     Node<V> rootNode = null;
 
     // Nodes representing the trace tree
-    Map<Long, Node<V>> idToNode = new LinkedHashMap<Long, Node<V>>();
+    Map<Long, Node<V>> idToNode = new LinkedHashMap<>();
     // Collect the parent-child relationships between all spans.
-    Map<Long, Long> idToParent = new LinkedHashMap<Long, Long>(idToNode.size());
+    Map<Long, Long> idToParent = new LinkedHashMap<>(idToNode.size());
 
     public void addNode(Long parentId, long id, @Nullable V value) {
       Node<V> node = new Node<V>().value(value);
-      if (parentId == null) { // special-case root
-        rootNode = node;
+      if (parentId == null) {
+        // special-case root, and attribute missing parents to it. In
+        // other words, assume that the first root is the "real" root.
+        if (rootNode == null) {
+          rootNode = node;
+        } else {
+          idToNode.put(id, node);
+          idToParent.put(id, null);
+        }
       } else {
         idToNode.put(id, node);
         idToParent.put(id, parentId);
@@ -138,15 +150,17 @@ public final class Node<V> {
       for (Map.Entry<Long, Long> entry : idToParent.entrySet()) {
         Node<V> node = idToNode.get(entry.getKey());
         Node<V> parent = idToNode.get(entry.getValue());
-        if (parent == null && rootNode == null) { // handle headless trace
-          rootNode = node;
-        } else if (parent == null) { // attribute missing parents to root
+        if (parent == null) { // handle headless trace
+          if (rootNode == null) {
+            rootNode = new Node<>();
+            rootNode.missingRootDummyNode = true;
+          }
           rootNode.addChild(node);
         } else {
           parent.addChild(node);
         }
       }
-      return rootNode != null ? rootNode : new Node<V>();
+      return rootNode != null ? rootNode : new Node<>();
     }
   }
 }

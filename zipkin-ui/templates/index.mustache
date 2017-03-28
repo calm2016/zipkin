@@ -68,6 +68,9 @@
       Services:
       <span class='label service-tag-filtered' data-service-name="{{serviceName}}">{{serviceName}}</span>
     </div>
+    <div class="pull-right">
+        <a href='{{apiURL}}' id='rawResultsJsonLink'><span class='btn btn-primary btn-xs badge'>JSON</span></a>
+    </div>
   </div>
 {{/queryWasPerformed}}
 </div>
@@ -87,7 +90,7 @@
   <ul id="traces">
   {{#traces}}
     <li class="trace {{infoClass}}" data-traceId="{{traceId}}" data-duration="{{duration}}" data-timestamp="{{timestamp}}" data-service-percentage="{{servicePercentage}}">
-      <a href="/traces/{{traceId}}?serviceName={{traceServiceName}}">
+      <a href="/traces/{{traceId}}">
         <div class="bar-block">
           <span class="bar-graphic" style="width:{{width}}%;"></span>
           <span class="bar-label">{{durationStr}}</span>
@@ -113,7 +116,7 @@
 </div>
 
 <!-- help panel for different lookup options -->
-<div class="modal fade" id="infoPanel">
+<div class="modal fade" id="infoPanel" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
@@ -160,4 +163,19 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class='modal fade' id='jsonPanel' tabindex='-1'>
+    <div class='modal-dialog modal-lg'>
+        <div class='modal-content'>
+            <div class='modal-header'>
+                <button type='button' class='close' data-dismiss='modal' aria-hidden='true'>&times;</button>
+                <a href='#' class='save'><span class='glyphicon glyphicon-save' aria-hidden='true' aria-label='save'></span></a>
+                <h4 class='modal-title'></h4>
+            </div>
+            <div class='modal-body'>
+                <pre></pre>
+            </div>
+        </div>
+    </div>
 </div>

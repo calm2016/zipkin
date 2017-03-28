@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright 2015-2016 The OpenZipkin Authors
+# Copyright 2015-2017 The OpenZipkin Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
 # in compliance with the License. You may obtain a copy of the License at
@@ -126,7 +126,7 @@ javadoc_to_gh_pages() {
   done
 
   # Update gh-pages
-  git fetch origin gh-pages:origin/gh-pages
+  git fetch origin gh-pages:gh-pages
   git checkout gh-pages
   rm -rf "$version"
   mv "javadoc-builddir/$version" ./
@@ -144,7 +144,7 @@ javadoc_to_gh_pages() {
   git add "$version"
   git add index.html
   git commit -m "Automatically updated javadocs for $version"
-  git push
+  git push origin gh-pages
 }
 
 #----------------------
@@ -156,7 +156,8 @@ if ! is_pull_request && build_started_by_tag; then
   check_release_tag
 fi
 
-MYSQL_USER=root ./mvnw install -nsu
+# skip license on travis due to #1512
+MYSQL_USER=root ./mvnw install -nsu -Dlicense.skip=true
 
 # If we are on a pull request, our only job is to run tests, which happened above via ./mvnw install
 if is_pull_request; then
@@ -176,5 +177,6 @@ elif is_travis_branch_master; then
 # If we are on a release tag, the following will update any version references and push a version tag for deployment.
 elif build_started_by_tag; then
   safe_checkout_master
-  ./mvnw --batch-mode -s ./.settings.xml -Prelease -nsu -DreleaseVersion="$(release_version)" -Darguments="-DskipTests" release:prepare
+  # skip license on travis due to #1512
+  ./mvnw --batch-mode -s ./.settings.xml -Prelease -nsu -DreleaseVersion="$(release_version)" -Darguments="-DskipTests -Dlicense.skip=true" release:prepare
 fi

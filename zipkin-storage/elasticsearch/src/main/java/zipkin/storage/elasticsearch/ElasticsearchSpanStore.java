@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -14,7 +14,6 @@
 package zipkin.storage.elasticsearch;
 
 import com.google.common.base.Function;
-import com.google.common.base.Predicate;
 import com.google.common.collect.FluentIterable;
 import com.google.common.util.concurrent.AsyncFunction;
 import com.google.common.util.concurrent.Futures;
@@ -185,11 +184,7 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
             if (input == null) return Collections.emptyList();
             // Due to tokenization of the trace ID, our matches are imprecise on Span.traceIdHigh
             return FluentIterable.from(GroupByTraceId.apply(input, strictTraceId, true))
-                .filter(new Predicate<List<Span>>() {
-                  @Override public boolean apply(List<Span> input) {
-                    return input.get(0).traceIdHigh == 0 || request.test(input);
-                  }
-                }).toList();
+                .filter(trace -> trace.get(0).traceIdHigh == 0 || request.test(trace)).toList();
           }
         });
   }
@@ -220,10 +215,7 @@ final class ElasticsearchSpanStore implements GuavaSpanStore {
     }
     return client.collectBucketKeys(catchAll,
         boolQuery().must(matchAllQuery()).filter(filter),
-        AggregationBuilders.terms("name_agg")
-            .order(Order.term(true))
-            .field("name")
-            .size(Integer.MAX_VALUE));
+        AggregationBuilders.terms("name_agg").field("name").size(Integer.MAX_VALUE));
   }
 
   @Override public ListenableFuture<List<DependencyLink>> getDependencies(long endMillis,

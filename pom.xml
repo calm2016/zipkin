@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
 
-    Copyright 2015-2016 The OpenZipkin Authors
+    Copyright 2015-2017 The OpenZipkin Authors
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
     in compliance with the License. You may obtain a copy of the License at
@@ -19,7 +19,7 @@
 
   <groupId>io.zipkin.java</groupId>
   <artifactId>parent</artifactId>
-  <version>1.16.1-SNAPSHOT</version>
+  <version>1.21.1-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <modules>
@@ -43,51 +43,49 @@
     <main.java.version>1.7</main.java.version>
     <main.signature.artifact>java17</main.signature.artifact>
 
-    <!-- default bytecode version for src/test -->
-    <maven.compiler.source>1.8</maven.compiler.source>
-    <maven.compiler.target>1.8</maven.compiler.target>
-
     <main.basedir>${project.basedir}</main.basedir>
 
-    <brave.version>3.13.0</brave.version>
-    <cassandra-driver-core.version>3.1.1</cassandra-driver-core.version>
+    <brave.version>4.0.2</brave.version>
+    <cassandra-driver-core.version>3.1.3</cassandra-driver-core.version>
     <okio.version>1.11.0</okio.version>
-    <jooq.version>3.8.5</jooq.version>
-    <spring-boot.version>1.4.1.RELEASE</spring-boot.version>
+    <jooq.version>3.8.6</jooq.version>
+    <spring-boot.version>1.4.3.RELEASE</spring-boot.version>
     <!-- MySQL connector is GPL, even if it has an OSS exception.
          https://www.mysql.com/about/legal/licensing/foss-exception/
 
          MariaDB has a friendlier license, LGPL, which is less scary in audits.
     -->
-    <mariadb-java-client.version>1.4.6</mariadb-java-client.version>
-    <HikariCP.version>2.4.7</HikariCP.version>
-    <elasticsearch.version>2.4.1</elasticsearch.version>
-    <slf4j.version>1.7.21</slf4j.version>
-    <logback.version>1.1.7</logback.version>
+    <mariadb-java-client.version>1.5.7</mariadb-java-client.version>
+    <!-- Java 8 dep, which is ok as zipkin-mysql is Java 8 anyway -->
+    <HikariCP.version>2.5.1</HikariCP.version>
+    <elasticsearch.version>2.4.4</elasticsearch.version>
+    <slf4j.version>1.7.22</slf4j.version>
+    <logback.version>1.1.8</logback.version>
     <!-- be careful to not eagerly update as we can break other storage or transports!
          This is set to the lowest possible version. Elasticsearch requires guava 18
     -->
     <guava.version>18.0</guava.version>
     <junit.version>4.12</junit.version>
-    <mockito.version>1.10.19</mockito.version>
-    <assertj.version>3.5.1</assertj.version>
+    <mockito.version>2.6.3</mockito.version>
+    <assertj.version>3.6.1</assertj.version>
     <hamcrest.version>1.3</hamcrest.version>
-    <okhttp.version>3.4.1</okhttp.version>
+    <okhttp.version>3.6.0</okhttp.version>
+    <testcontainers.version>1.1.7</testcontainers.version>
 
     <animal-sniffer-maven-plugin.version>1.15</animal-sniffer-maven-plugin.version>
     <maven-plugin.version>0.3.3</maven-plugin.version>
-    <maven-compiler-plugin.version>3.5.1</maven-compiler-plugin.version>
+    <maven-compiler-plugin.version>3.6.0</maven-compiler-plugin.version>
     <maven-install-plugin.version>2.5.2</maven-install-plugin.version>
     <maven-source-plugin.version>3.0.1</maven-source-plugin.version>
     <maven-javadoc-plugin.version>2.10.4</maven-javadoc-plugin.version>
-    <license-maven-plugin.version>2.11</license-maven-plugin.version>
+    <license-maven-plugin.version>3.0</license-maven-plugin.version>
     <maven-jar-plugin.version>3.0.2</maven-jar-plugin.version>
     <maven-release-plugin.version>2.5.3</maven-release-plugin.version>
     <maven-shade-plugin.version>2.4.3</maven-shade-plugin.version>
 
     <!-- Catch common Java mistakes as compile-time errors -->
-    <plexus-compiler-javac-errorprone.version>2.8</plexus-compiler-javac-errorprone.version>
-    <errorprone.version>2.0.9</errorprone.version>
+    <plexus-compiler-javac-errorprone.version>2.8.1</plexus-compiler-javac-errorprone.version>
+    <errorprone.version>2.0.15</errorprone.version>
   </properties>
 
   <name>Zipkin (Parent)</name>
@@ -115,11 +113,12 @@
     <tag>HEAD</tag>
   </scm>
 
+  <!-- Developer section is needed for Maven Central, but doesn't need to include each person -->
   <developers>
     <developer>
-      <id>adriancole</id>
-      <name>Adrian Cole</name>
-      <email>acole@pivotal.io</email>
+      <id>openzipkin</id>
+      <name>OpenZipkin Gitter</name>
+      <url>https://gitter.im/openzipkin/zipkin</url>
     </developer>
   </developers>
 
@@ -334,6 +333,12 @@
       </dependency>
 
       <dependency>
+        <groupId>com.google.auto.value</groupId>
+        <artifactId>auto-value</artifactId>
+        <version>1.4-rc2</version>
+      </dependency>
+
+      <dependency>
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
         <version>${junit.version}</version>
@@ -343,6 +348,18 @@
         <groupId>org.assertj</groupId>
         <artifactId>assertj-core</artifactId>
         <version>${assertj.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers</artifactId>
+        <version>${testcontainers.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>mysql</artifactId>
+        <version>${testcontainers.version}</version>
       </dependency>
 
       <dependency>
@@ -358,6 +375,17 @@
       </dependency>
 
       <!-- Don't bring in brave's transitive dep on zipkin -->
+      <dependency>
+        <groupId>io.zipkin.brave</groupId>
+        <artifactId>brave</artifactId>
+        <version>${brave.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>zipkin</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
       <dependency>
         <groupId>io.zipkin.brave</groupId>
         <artifactId>brave-core</artifactId>
@@ -426,33 +454,51 @@
           <artifactId>maven-shade-plugin</artifactId>
           <version>${maven-shade-plugin.version}</version>
         </plugin>
+
         <plugin>
-                <groupId>org.eclipse.m2e</groupId>
-                <artifactId>lifecycle-mapping</artifactId>
-                <version>1.0.0</version>
-                <configuration>
-                    <lifecycleMappingMetadata>
-                        <pluginExecutions>
-                            <pluginExecution>
-                                <pluginExecutionFilter>
-                                    <groupId>org.apache.maven.plugins</groupId>
-                                    <artifactId>maven-compiler-plugin</artifactId>
-                                    <versionRange>[3.3,)</versionRange>
-                                    <goals>
-                                        <goal>compile</goal>
-                                        <goal>testCompile</goal>
-                                    </goals>
-                                </pluginExecutionFilter>
-                                <action>
-                                    <configurator>
-                                        <id>org.eclipse.m2e.jdt.javaConfigurator</id>
-                                    </configurator>
-                                </action>
-                            </pluginExecution>
-                        </pluginExecutions>
-                    </lifecycleMappingMetadata>
-                </configuration>
-            </plugin>
+          <groupId>org.eclipse.m2e</groupId>
+          <artifactId>lifecycle-mapping</artifactId>
+          <version>1.0.0</version>
+          <configuration>
+            <lifecycleMappingMetadata>
+              <pluginExecutions>
+                <pluginExecution>
+                  <pluginExecutionFilter>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <versionRange>[3.3,)</versionRange>
+                    <goals>
+                      <goal>compile</goal>
+                      <goal>testCompile</goal>
+                    </goals>
+                  </pluginExecutionFilter>
+                  <action>
+                    <configurator>
+                      <id>org.eclipse.m2e.jdt.javaConfigurator</id>
+                    </configurator>
+                  </action>
+                </pluginExecution>
+              </pluginExecutions>
+            </lifecycleMappingMetadata>
+          </configuration>
+        </plugin>
+
+        <plugin>
+          <groupId>net.orfjackal.retrolambda</groupId>
+          <artifactId>retrolambda-maven-plugin</artifactId>
+          <version>2.4.0</version>
+          <executions>
+            <execution>
+              <goals>
+                <goal>process-main</goal>
+              </goals>
+              <configuration>
+                <target>${main.java.version}</target>
+                <fork>false</fork>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -460,25 +506,29 @@
       <plugin>
         <inherited>true</inherited>
         <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <!-- Retrolambda will rewrite lambdas as Java 6 bytecode -->
+          <source>1.8</source>
+          <target>1.8</target>
+        </configuration>
         <executions>
-          <!-- Ensure main source tree compiles to Java ${main.java.version} bytecode. -->
           <execution>
             <id>default-compile</id>
             <phase>compile</phase>
             <goals>
               <goal>compile</goal>
             </goals>
+            <!-- only use errorprone on main source tree -->
             <configuration>
-              <source>${main.java.version}</source>
-              <target>${main.java.version}</target>
+              <compilerId>javac-with-errorprone</compilerId>
+              <forceJavacCompilerUse>true</forceJavacCompilerUse>
+              <showWarnings>true</showWarnings>
+              <compilerArgs>
+                <arg>-XepDisableWarningsInGeneratedCode</arg>
+              </compilerArgs>
             </configuration>
           </execution>
         </executions>
-        <configuration>
-          <compilerId>javac-with-errorprone</compilerId>
-          <forceJavacCompilerUse>true</forceJavacCompilerUse>
-          <showWarnings>true</showWarnings>
-        </configuration>
         <dependencies>
           <dependency>
             <groupId>org.codehaus.plexus</groupId>
@@ -491,6 +541,12 @@
             <version>${errorprone.version}</version>
           </dependency>
         </dependencies>
+      </plugin>
+
+      <!-- Explicitly disable when using java version 1.8+ or not using java -->
+      <plugin>
+        <groupId>net.orfjackal.retrolambda</groupId>
+        <artifactId>retrolambda-maven-plugin</artifactId>
       </plugin>
 
       <plugin>
@@ -591,6 +647,17 @@
       <id>release</id>
       <build>
         <plugins>
+          <!-- disable license plugin since it should have already checked things and #1512 -->
+          <plugin>
+            <groupId>com.mycila</groupId>
+            <artifactId>license-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>none</phase>
+              </execution>
+            </executions>
+          </plugin>
+
           <!-- Creates source jar -->
           <plugin>
             <artifactId>maven-source-plugin</artifactId>

@@ -92,7 +92,7 @@ export function formatEndpoint({ipv4, ipv6, port = 0, serviceName = ''}) {
   return `${ipv4}:${port}`;
 }
 
-export default function traceToMustache(trace) {
+export default function traceToMustache(trace, logsUrl = undefined) {
   const summary = traceSummary(trace);
   const traceId = summary.traceId;
   const duration = mkDurationStr(summary.duration);
@@ -118,20 +118,18 @@ export default function traceToMustache(trace) {
         if (a.key === Constants.ERROR) {
           errorType = 'critical';
         }
+        const key = ConstantNames[a.key] || a.key;
         if (Constants.CORE_ADDRESS.indexOf(a.key) !== -1) {
           return {
             ...a,
-            key: ConstantNames[a.key],
+            key,
             value: formatEndpoint(a.endpoint)
           };
-        } else if (ConstantNames[a.key]) {
-          return {
-            ...a,
-            key: ConstantNames[a.key]
-          };
-        } else {
-          return a;
         }
+        return {
+          ...a,
+          key
+        };
       });
 
       var spanName = span.name;
@@ -204,6 +202,7 @@ export default function traceToMustache(trace) {
     timeMarkers,
     timeMarkersBackup,
     spans,
-    spansBackup
+    spansBackup,
+    logsUrl
   };
 }

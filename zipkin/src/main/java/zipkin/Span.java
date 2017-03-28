@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -44,7 +44,7 @@ import static zipkin.internal.Util.writeHexLong;
  * <p>Span identifiers are packed into longs, but should be treated opaquely. ID encoding is
  * 16 or 32 character lower-hex, to avoid signed interpretation.
  */
-public final class Span implements Comparable<Span>, Serializable {
+public final class Span implements Comparable<Span>, Serializable { // for Spark jobs
   private static final long serialVersionUID = 0L;
 
   /**
@@ -193,8 +193,23 @@ public final class Span implements Comparable<Span>, Serializable {
     HashSet<Annotation> annotations;
     HashSet<BinaryAnnotation> binaryAnnotations;
     Boolean debug;
+    boolean isClientSpan; // internal
 
     Builder() {
+    }
+
+    public Builder clear() {
+      traceId = null;
+      traceIdHigh = null;
+      name = null;
+      id = null;
+      parentId = null;
+      timestamp = null;
+      if (annotations != null) annotations.clear();
+      if (binaryAnnotations != null) binaryAnnotations.clear();
+      debug = null;
+      isClientSpan = false;
+      return this;
     }
 
     Builder(Span source) {
@@ -218,7 +233,7 @@ public final class Span implements Comparable<Span>, Serializable {
       if (this.traceId == null) {
         this.traceId = that.traceId;
       }
-      if (this.traceIdHigh == 0) {
+      if (this.traceIdHigh == null || this.traceIdHigh == 0) {
         this.traceIdHigh = that.traceIdHigh;
       }
       if (this.name == null || this.name.length() == 0 || this.name.equals("unknown")) {
@@ -231,6 +246,18 @@ public final class Span implements Comparable<Span>, Serializable {
         this.parentId = that.parentId;
       }
 
+      // When we move to span model 2, remove this code in favor of using Span.kind == CLIENT
+      boolean thisIsClientSpan = this.isClientSpan;
+      boolean thatIsClientSpan = false;
+      for (Annotation a : that.annotations) {
+        if (a.value.equals(Constants.CLIENT_SEND)) thatIsClientSpan = true;
+        addAnnotation(a);
+      }
+
+      for (BinaryAnnotation a : that.binaryAnnotations) {
+        addBinaryAnnotation(a);
+      }
+
       // Single timestamp makes duration easy: just choose max
       if (this.timestamp == null || that.timestamp == null || this.timestamp.equals(
           that.timestamp)) {
@@ -240,19 +267,18 @@ public final class Span implements Comparable<Span>, Serializable {
         } else if (that.duration != null) {
           this.duration = Math.max(this.duration, that.duration);
         }
-      } else { // duration might need to be recalculated, since we have 2 different timestamps
-        long thisEndTs = this.duration != null ? this.timestamp + this.duration : this.timestamp;
-        long thatEndTs = that.duration != null ? that.timestamp + that.duration : that.timestamp;
-        this.timestamp = Math.min(this.timestamp, that.timestamp);
-        this.duration = Math.max(thisEndTs, thatEndTs) - this.timestamp;
+      } else {
+        // We have 2 different timestamps. If we have client data in either one of them, use that,
+        // else set timestamp and duration to null
+        if (thatIsClientSpan) {
+          this.timestamp = that.timestamp;
+          this.duration = that.duration;
+        } else if (!thisIsClientSpan) {
+          this.timestamp = null;
+          this.duration = null;
+        }
       }
 
-      for (Annotation a : that.annotations) {
-        addAnnotation(a);
-      }
-      for (BinaryAnnotation a : that.binaryAnnotations) {
-        addBinaryAnnotation(a);
-      }
       if (this.debug == null) {
         this.debug = that.debug;
       }
@@ -307,15 +333,15 @@ public final class Span implements Comparable<Span>, Serializable {
      * @see Span#annotations
      */
     public Builder annotations(Collection<Annotation> annotations) {
-      this.annotations = new HashSet<Annotation>(annotations);
+      if (this.annotations != null) this.annotations.clear();
+      for (Annotation a : annotations) addAnnotation(a);
       return this;
     }
 
     /** @see Span#annotations */
     public Builder addAnnotation(Annotation annotation) {
-      if (annotations == null) {
-        annotations = new HashSet<Annotation>();
-      }
+      if (annotations == null) annotations = new HashSet<>();
+      if (annotation.value.equals(Constants.CLIENT_SEND)) isClientSpan = true;
       annotations.add(annotation);
       return this;
     }
@@ -326,15 +352,14 @@ public final class Span implements Comparable<Span>, Serializable {
      * @see Span#binaryAnnotations
      */
     public Builder binaryAnnotations(Collection<BinaryAnnotation> binaryAnnotations) {
-      this.binaryAnnotations = new HashSet<BinaryAnnotation>(binaryAnnotations);
+      if (this.binaryAnnotations != null) this.binaryAnnotations.clear();
+      for (BinaryAnnotation b : binaryAnnotations) addBinaryAnnotation(b);
       return this;
     }
 
     /** @see Span#binaryAnnotations */
     public Builder addBinaryAnnotation(BinaryAnnotation binaryAnnotation) {
-      if (binaryAnnotations == null) {
-        binaryAnnotations = new HashSet<BinaryAnnotation>();
-      }
+      if (binaryAnnotations == null) binaryAnnotations = new HashSet<>();
       binaryAnnotations.add(binaryAnnotation);
       return this;
     }
@@ -357,23 +382,19 @@ public final class Span implements Comparable<Span>, Serializable {
 
   @Override
   public boolean equals(Object o) {
-    if (o == this) {
-      return true;
-    }
-    if (o instanceof Span) {
-      Span that = (Span) o;
-      return (this.traceIdHigh == that.traceIdHigh)
-          && (this.traceId == that.traceId)
-          && (this.name.equals(that.name))
-          && (this.id == that.id)
-          && equal(this.parentId, that.parentId)
-          && equal(this.timestamp, that.timestamp)
-          && equal(this.duration, that.duration)
-          && (this.annotations.equals(that.annotations))
-          && (this.binaryAnnotations.equals(that.binaryAnnotations))
-          && equal(this.debug, that.debug);
-    }
-    return false;
+    if (o == this) return true;
+    if (!(o instanceof Span)) return false;
+    Span that = (Span) o;
+    return (this.traceIdHigh == that.traceIdHigh)
+        && (this.traceId == that.traceId)
+        && (this.name.equals(that.name))
+        && (this.id == that.id)
+        && equal(this.parentId, that.parentId)
+        && equal(this.timestamp, that.timestamp)
+        && equal(this.duration, that.duration)
+        && (this.annotations.equals(that.annotations))
+        && (this.binaryAnnotations.equals(that.binaryAnnotations))
+        && equal(this.debug, that.debug);
   }
 
   @Override
@@ -436,7 +457,7 @@ public final class Span implements Comparable<Span>, Serializable {
 
   /** Returns the distinct {@link Endpoint#serviceName service names} that logged to this span. */
   public Set<String> serviceNames() {
-    Set<String> result = new HashSet<String>();
+    Set<String> result = new HashSet<>();
     for (Annotation a : annotations) {
       if (a.endpoint == null) continue;
       if (a.endpoint.serviceName.isEmpty()) continue;

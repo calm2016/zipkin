@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -14,17 +14,17 @@
 package zipkin.storage.elasticsearch;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.UncheckedExecutionException;
 import java.io.IOException;
 import java.util.List;
-import zipkin.internal.Lazy;
 import zipkin.storage.StorageComponent;
+import zipkin.storage.guava.GuavaSpanConsumer;
+import zipkin.storage.guava.GuavaStorageAdapters;
 import zipkin.storage.guava.LazyGuavaStorageComponent;
 
 import static zipkin.internal.Util.checkNotNull;
 
 public final class ElasticsearchStorage
-    extends LazyGuavaStorageComponent<ElasticsearchSpanStore, ElasticsearchSpanConsumer> {
+    extends LazyGuavaStorageComponent<ElasticsearchSpanStore, GuavaSpanConsumer> {
 
   public static Builder builder() {
     return new Builder(new NativeClient.Builder());
@@ -48,6 +48,7 @@ public final class ElasticsearchStorage
     // TODO: Tokenize traceId only when this is false.
     boolean strictTraceId = true;
     String index = "zipkin";
+    char dateSeparator = '-';
     int indexShards = 5;
     int indexReplicas = 1;
 
@@ -96,6 +97,17 @@ public final class ElasticsearchStorage
     }
 
     /**
+     * The date separator to use when generating daily index names. Defaults to '-'.
+     *
+     * <p>By default, spans with a timestamp falling on 2016/03/19 end up in the index
+     * 'zipkin-2016-03-19'. When the date separator is '.', the index would be 'zipkin-2016.03.19'.
+     */
+    public Builder dateSeparator(char dateSeparator) {
+      this.dateSeparator = dateSeparator;
+      return this;
+    }
+
+    /**
      * The number of replica copies of each shard in the index. Each shard and its replicas are
      * assigned to a machine in the cluster. Increasing the number of replicas and machines in the
      * cluster will improve read performance, but not write performance. Number of replicas can be
@@ -127,7 +139,7 @@ public final class ElasticsearchStorage
 
   ElasticsearchStorage(Builder builder) {
     lazyClient = new LazyClient(builder);
-    indexNameFormatter = new IndexNameFormatter(builder.index);
+    indexNameFormatter = new IndexNameFormatter(builder.index, builder.dateSeparator);
     strictTraceId = builder.strictTraceId;
   }
 
@@ -140,8 +152,9 @@ public final class ElasticsearchStorage
     return new ElasticsearchSpanStore(client(), indexNameFormatter, strictTraceId);
   }
 
-  @Override protected ElasticsearchSpanConsumer computeGuavaSpanConsumer() {
-    return new ElasticsearchSpanConsumer(client(), indexNameFormatter);
+  @Override protected GuavaSpanConsumer computeGuavaSpanConsumer() {
+    return GuavaStorageAdapters.asyncToGuava(
+        new ElasticsearchSpanConsumer(client(), indexNameFormatter));
   }
 
   @VisibleForTesting void clear() throws IOException {
@@ -151,9 +164,7 @@ public final class ElasticsearchStorage
   @Override public CheckResult check() {
     try {
       client().ensureClusterReady(indexNameFormatter.catchAll());
-    } catch (UncheckedExecutionException e) { // we have to wrap on LazyClient.compute()
-      return CheckResult.failed((Exception) e.getCause());
-    } catch (Exception e) {
+    } catch (RuntimeException e) {
       return CheckResult.failed(e);
     }
     return CheckResult.OK;

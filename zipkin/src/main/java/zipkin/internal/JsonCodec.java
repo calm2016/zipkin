@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -19,7 +19,6 @@ import com.google.gson.stream.MalformedJsonException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.InetAddress;
 import java.net.Inet6Address;
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -78,13 +77,13 @@ public final class JsonCodec implements Codec {
         } else if (nextName.equals("ipv6")) {
           String input = reader.nextString();
           // Shouldn't hit DNS, because it's an IP string literal.
-          InetAddress addr = Inet6Address.getByName(input);
+          byte[] addressBytes = Inet6Address.getByName(input).getAddress();
           //  InetAddress.getByName returns an Inet4Address for
           //  IPv4-mapped IPv6 addresses such as ::ffff:192.0.2.128
-          if (addr instanceof Inet6Address) {
-            result.ipv6(addr.getAddress());
-          } else {
-            result.ipv4(parseIPv4Address(addr.getHostAddress()));
+          if (addressBytes.length == 4) {
+            result.ipv4(ByteBuffer.wrap(addressBytes).getInt());
+          } else if (addressBytes.length == 16) {
+            result.ipv6(addressBytes);
           }
         } else if (nextName.equals("port")) {
           result.port(reader.nextInt());
@@ -94,15 +93,6 @@ public final class JsonCodec implements Codec {
       }
       reader.endObject();
       return result.build();
-    }
-
-    private int parseIPv4Address(String input) {
-      String[] ipv4String = input.split("\\.", 5);
-      int ipv4 = 0;
-      for (String part : ipv4String) {
-          ipv4 = ipv4 << 8 | (Integer.parseInt(part) & 0xff);
-      }
-      return ipv4;
     }
 
     @Override public int sizeInBytes(Endpoint value) {
@@ -191,15 +181,19 @@ public final class JsonCodec implements Codec {
     @Override
     public BinaryAnnotation fromJson(JsonReader reader) throws IOException {
       BinaryAnnotation.Builder result = BinaryAnnotation.builder();
+      String key = null;
+      Type type = Type.STRING;
+      boolean valueSet = false;
       String number = null;
       String string = null;
-      Type type = Type.STRING;
+
       reader.beginObject();
       while (reader.hasNext()) {
         String nextName = reader.nextName();
         if (nextName.equals("key")) {
-          result.key(reader.nextString());
+          result.key(key = reader.nextString());
         } else if (nextName.equals("value")) {
+          valueSet = true;
           switch (reader.peek()) {
             case BOOLEAN:
               type = Type.BOOL;
@@ -223,6 +217,11 @@ public final class JsonCodec implements Codec {
         } else {
           reader.skipValue();
         }
+      }
+      if (key == null) {
+        throw new MalformedJsonException("No key at " + reader.getPath());
+      } else if (!valueSet) {
+        throw new MalformedJsonException("No value for key " + key + " at " + reader.getPath());
       }
       reader.endObject();
       result.type(type);
@@ -509,12 +508,12 @@ public final class JsonCodec implements Codec {
 
   public List<List<Span>> readTraces(byte[] bytes) {
     JsonReader reader = jsonReader(bytes);
-    List<List<Span>> result = new LinkedList<List<Span>>(); // cause we don't know how long it will be
+    List<List<Span>> result = new LinkedList<>(); // cause we don't know how long it will be
     try {
       reader.beginArray();
       while (reader.hasNext()) {
         reader.beginArray();
-        List<Span> trace = new LinkedList<Span>(); // cause we don't know how long it will be
+        List<Span> trace = new LinkedList<>(); // cause we don't know how long it will be
         while (reader.hasNext()) {
           trace.add(SPAN_ADAPTER.fromJson(reader));
         }
@@ -629,7 +628,7 @@ public final class JsonCodec implements Codec {
     try {
       reader.beginArray();
       if (reader.hasNext()) {
-        result = new LinkedList<T>(); // cause we don't know how long it will be
+        result = new LinkedList<>(); // cause we don't know how long it will be
       } else {
         result = Collections.emptyList();
       }
@@ -644,7 +643,7 @@ public final class JsonCodec implements Codec {
   }
 
   private static JsonReader jsonReader(byte[] bytes) {
-    return new JsonReader(new InputStreamReader(new ByteArrayInputStream(bytes)));
+    return new JsonReader(new InputStreamReader(new ByteArrayInputStream(bytes), UTF_8));
   }
 
   /** Inability to encode is a programming bug. */
@@ -653,9 +652,42 @@ public final class JsonCodec implements Codec {
     try {
       writer.write(value, b);
     } catch (RuntimeException e) {
-      throw assertionError("Could not write " + value + " as json", e);
+      byte[] bytes = b.toByteArray();
+      int lengthWritten = bytes.length;
+      for (int i = 0; i < bytes.length; i++) {
+        if (bytes[i] == 0) {
+          lengthWritten = i;
+          break;
+        }
+      }
+
+      final byte[] bytesWritten;
+      if (lengthWritten == bytes.length) {
+        bytesWritten = bytes;
+      } else {
+        bytesWritten = new byte[lengthWritten];
+        System.arraycopy(bytes, 0, bytesWritten, 0, lengthWritten);
+      }
+
+      String written = new String(bytesWritten, UTF_8);
+      // Don't use value directly in the message, as its toString might be implemented using this
+      // method. If that's the case, we'd stack overflow. Instead, emit what we've written so far.
+      String message = String.format(
+          "Bug found using %s to write %s as json. Wrote %s/%s bytes: %s",
+          writer.getClass().getSimpleName(), value.getClass().getSimpleName(), lengthWritten,
+          bytes.length, written);
+      throw assertionError(message, e);
     }
     return b.toByteArray();
+  }
+
+  static int parseIPv4Address(String input) {
+    String[] ipv4String = input.split("\\.", 5);
+    int ipv4 = 0;
+    for (String part : ipv4String) {
+      ipv4 = ipv4 << 8 | (Integer.parseInt(part) & 0xff);
+    }
+    return ipv4;
   }
 
   static <T> int sizeInBytes(Buffer.Writer<T> writer, List<T> value) {

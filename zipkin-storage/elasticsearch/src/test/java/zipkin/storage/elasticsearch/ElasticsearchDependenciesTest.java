@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -13,7 +13,6 @@
  */
 package zipkin.storage.elasticsearch;
 
-import com.google.common.annotations.VisibleForTesting;
 import java.io.IOException;
 import java.util.List;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
@@ -26,26 +25,18 @@ import zipkin.internal.Util;
 import zipkin.storage.DependenciesTest;
 import zipkin.storage.InMemorySpanStore;
 import zipkin.storage.InMemoryStorage;
-import zipkin.storage.StorageComponent;
 
 import static zipkin.TestObjects.DAY;
 import static zipkin.TestObjects.TODAY;
+import static zipkin.internal.ApplyTimestampAndDuration.guessTimestamp;
 import static zipkin.internal.Util.midnightUTC;
 
-public class ElasticsearchDependenciesTest extends DependenciesTest {
+public abstract class ElasticsearchDependenciesTest extends DependenciesTest {
 
-  private final ElasticsearchStorage storage;
-
-  public ElasticsearchDependenciesTest() {
-    this.storage = ElasticsearchTestGraph.INSTANCE.storage.get();
-  }
-
-  @Override protected StorageComponent storage() {
-    return storage;
-  }
+  protected abstract ElasticsearchStorage storage();
 
   @Override public void clear() throws IOException {
-    storage.clear();
+    storage().clear();
   }
 
   /**
@@ -55,24 +46,23 @@ public class ElasticsearchDependenciesTest extends DependenciesTest {
    * <p>This uses {@link InMemorySpanStore} to prepare links and {@link #writeDependencyLinks(List,
    * long)}} to store them.
    */
-  @Override
-  public void processDependencies(List<Span> spans) {
+  @Override public void processDependencies(List<Span> spans) {
     InMemoryStorage mem = new InMemoryStorage();
     mem.spanConsumer().accept(spans);
     List<DependencyLink> links = mem.spanStore().getDependencies(TODAY + DAY, null);
 
     // This gets or derives a timestamp from the spans
-    long midnight = midnightUTC(MergeById.apply(spans).get(0).timestamp / 1000);
+    long midnight = midnightUTC(guessTimestamp(MergeById.apply(spans).get(0)) / 1000);
     writeDependencyLinks(links, midnight);
   }
 
-  @VisibleForTesting void writeDependencyLinks(List<DependencyLink> links, long timestampMillis) {
+  protected void writeDependencyLinks(List<DependencyLink> links, long timestampMillis) {
     long midnight = Util.midnightUTC(timestampMillis);
-    TransportClient client = ((NativeClient) storage.client()).client;
+    TransportClient client = ((NativeClient) storage().client()).client;
     BulkRequestBuilder request = client.prepareBulk();
     for (DependencyLink link : links) {
       request.add(client.prepareIndex(
-          storage.indexNameFormatter.indexNameForTimestamp(midnight),
+          storage().indexNameFormatter.indexNameForTimestamp(midnight),
           ElasticsearchConstants.DEPENDENCY_LINK)
           .setId(link.parent + "|" + link.child) // Unique constraint
           .setSource(

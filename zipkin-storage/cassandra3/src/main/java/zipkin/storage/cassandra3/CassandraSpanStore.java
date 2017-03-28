@@ -74,12 +74,7 @@ final class CassandraSpanStore implements GuavaSpanStore {
 
   static final ListenableFuture<List<String>> EMPTY_LIST =
       immediateFuture(Collections.<String>emptyList());
-  static final Function<List<Span>, List<Span>> OR_NULL =
-      new Function<List<Span>, List<Span>>() {
-        @Override public List<Span> apply(List<Span> input) {
-          return input.isEmpty() ? null : input;
-        }
-      };
+  static final Function<List<Span>, List<Span>> OR_NULL = input -> input.isEmpty() ? null : input;
 
   private final int maxTraceCols;
   private final int indexFetchMultiplier;
@@ -158,27 +153,20 @@ final class CassandraSpanStore implements GuavaSpanStore {
             .limit(QueryBuilder.bindMarker("limit_"))
             .allowFiltering());
 
-    traceIdToTimestamp = new Function<ResultSet, Map<TraceIdUDT, Long>>() {
-      @Override public Map<TraceIdUDT, Long> apply(ResultSet input) {
-        Map<TraceIdUDT, Long> traceIdsToTimestamps = new LinkedHashMap<>();
-        for (Row row : input) {
-          traceIdsToTimestamps.put(
-              row.get("trace_id", TraceIdUDT.class),
-              UUIDs.unixTimestamp(row.getUUID("ts")));
-        }
-        return traceIdsToTimestamps;
+    traceIdToTimestamp = input -> {
+      Map<TraceIdUDT, Long> result = new LinkedHashMap<>();
+      for (Row row : input) {
+        result.put(row.get("trace_id", TraceIdUDT.class), UUIDs.unixTimestamp(row.getUUID("ts")));
       }
+      return result;
     };
 
-    collapseTraceIdMaps = new Function<List<Map<TraceIdUDT, Long>>, Map<TraceIdUDT, Long>>() {
-      @Override
-      public Map<TraceIdUDT, Long> apply(List<Map<TraceIdUDT, Long>> input) {
-        Map<TraceIdUDT, Long> result = new LinkedHashMap<>();
-        for (Map<TraceIdUDT, Long> m : input) {
-          result.putAll(m);
-        }
-        return result;
+    collapseTraceIdMaps = input -> {
+      Map<TraceIdUDT, Long> result = new LinkedHashMap<>();
+      for (Map<TraceIdUDT, Long> m : input) {
+        result.putAll(m);
       }
+      return result;
     };
 
     KeyspaceMetadata md = Schema.getKeyspaceMetadata(session);
@@ -215,7 +203,9 @@ final class CassandraSpanStore implements GuavaSpanStore {
       // While a valid port of the scala cassandra span store (from zipkin 1.35), there is a fault.
       // each annotation key is an intersection, meaning we likely return < traceIndexFetchSize.
       List<ListenableFuture<Map<TraceIdUDT, Long>>> futureKeySetsToIntersect = new ArrayList<>();
-      futureKeySetsToIntersect.add(traceIdToTimestamp);
+      if (request.spanName != null) {
+        futureKeySetsToIntersect.add(traceIdToTimestamp);
+      }
       for (String annotationKey : annotationKeys) {
         futureKeySetsToIntersect
             .add(getTraceIdsByAnnotation(annotationKey, request.endTs, request.lookback, traceIndexFetchSize));
@@ -360,7 +350,7 @@ final class CassandraSpanStore implements GuavaSpanStore {
       return transform(session.executeAsync(bound),
           new Function<ResultSet, List<Span>>() {
             @Override public List<Span> apply(ResultSet input) {
-              List<Span> result = new ArrayList<Span>(input.getAvailableWithoutFetching());
+              List<Span> result = new ArrayList<>(input.getAvailableWithoutFetching());
               for (Row row : input) {
                 TraceIdUDT traceId = row.get("trace_id", TraceIdUDT.class);
                 Span.Builder builder = Span.builder()

@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -24,6 +24,7 @@ import zipkin.Annotation;
 import zipkin.BinaryAnnotation;
 import zipkin.Endpoint;
 import zipkin.Span;
+import zipkin.internal.ApplyTimestampAndDuration;
 import zipkin.internal.Nullable;
 
 import static zipkin.Constants.CORE_ANNOTATIONS;
@@ -179,8 +180,8 @@ public final class QueryRequest {
   public static final class Builder {
     private String serviceName;
     private String spanName;
-    private List<String> annotations = new LinkedList<String>();
-    private Map<String, String> binaryAnnotations = new LinkedHashMap<String, String>();
+    private List<String> annotations = new LinkedList<>();
+    private Map<String, String> binaryAnnotations = new LinkedHashMap<>();
     private Long minDuration;
     private Long maxDuration;
     private Long endTs;
@@ -356,20 +357,20 @@ public final class QueryRequest {
 
   /** Tests the supplied trace against the current request */
   public boolean test(List<Span> spans) {
-    Long timestamp = spans.get(0).timestamp;
+    Long timestamp = ApplyTimestampAndDuration.guessTimestamp(spans.get(0));
     if (timestamp == null ||
         timestamp < (endTs - lookback) * 1000 ||
         timestamp > endTs * 1000) {
       return false;
     }
-    Set<String> serviceNames = new LinkedHashSet<String>();
+    Set<String> serviceNames = new LinkedHashSet<>();
     boolean testedDuration = minDuration == null && maxDuration == null;
 
     String spanNameToMatch = spanName;
-    Set<String> annotationsToMatch = new LinkedHashSet<String>(annotations);
-    Map<String, String> binaryAnnotationsToMatch = new LinkedHashMap<String, String>(binaryAnnotations);
+    Set<String> annotationsToMatch = new LinkedHashSet<>(annotations);
+    Map<String, String> binaryAnnotationsToMatch = new LinkedHashMap<>(binaryAnnotations);
 
-    Set<String> currentServiceNames = new LinkedHashSet<String>();
+    Set<String> currentServiceNames = new LinkedHashSet<>();
     for (Span span : spans) {
       currentServiceNames.clear();
 

@@ -1,5 +1,5 @@
 /**
- * Copyright 2015-2016 The OpenZipkin Authors
+ * Copyright 2015-2017 The OpenZipkin Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
@@ -22,6 +22,10 @@ import org.junit.Test;
 import zipkin.internal.Util;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static zipkin.Constants.CLIENT_RECV;
+import static zipkin.Constants.CLIENT_SEND;
+import static zipkin.Constants.SERVER_RECV;
+import static zipkin.Constants.SERVER_SEND;
 import static zipkin.TestObjects.APP_ENDPOINT;
 
 public class SpanTest {
@@ -88,6 +92,48 @@ public class SpanTest {
   }
 
   /**
+   * Test merging of client and server spans into a single span, with a clock skew. Final timestamp
+   * and duration for the span should be same as client.
+   */
+  @Test
+  public void timestampAndDurationMergeWithClockSkew() {
+
+    long today = Util.midnightUTC(System.currentTimeMillis());
+
+    long clientTimestamp = (today + 100) * 1000;
+    long clientDuration = 35 * 1000;
+
+    long serverTimestamp = (today + 200) * 1000;
+    long serverDuration = 30 * 1000;
+
+    Span clientPart = Span.builder()
+        .traceId(1L)
+        .name("test")
+        .id(1L)
+        .timestamp(clientTimestamp).duration(clientDuration)
+        .addAnnotation(Annotation.create(clientTimestamp, CLIENT_SEND, APP_ENDPOINT))
+        .addAnnotation(Annotation.create(clientTimestamp + clientDuration, CLIENT_RECV, APP_ENDPOINT))
+        .build();
+
+
+    Span serverPart = Span.builder()
+        .traceId(1L)
+        .name("test")
+        .id(1L)
+        .timestamp(serverTimestamp).duration(serverDuration)
+        .addAnnotation(Annotation.create(serverTimestamp, SERVER_RECV, APP_ENDPOINT))
+        .addAnnotation(Annotation.create(serverTimestamp + serverDuration, SERVER_SEND, APP_ENDPOINT))
+        .build();
+
+    Span completeSpan = clientPart.toBuilder()
+        .merge(serverPart)
+        .build();
+
+    assertThat(completeSpan.timestamp).isEqualTo(clientTimestamp);
+    assertThat(completeSpan.duration).isEqualTo(clientDuration);
+  }
+
+  /**
    * Some instrumentation set name to "unknown" or empty. This ensures dummy span names lose on
    * merge.
    */
@@ -100,6 +146,16 @@ public class SpanTest {
       assertThat(unknown.toBuilder().merge(get).build().name).isEqualTo("get");
       assertThat(get.toBuilder().merge(unknown).build().name).isEqualTo("get");
     }
+  }
+
+  @Test
+  public void mergeTraceIdHigh() {
+    Span span = Span.builder()
+        .merge(Span.builder().traceId(1).id(2).name("foo").traceIdHigh(1L).build())
+        .build();
+
+    assertThat(span.name).isEqualTo("foo");
+    assertThat(span.traceIdHigh).isEqualTo(1L);
   }
 
   @Test

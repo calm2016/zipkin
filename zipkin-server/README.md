@@ -42,7 +42,7 @@ ZIPKIN_QUERY_ALLOWED_ORIGINS=http://foo.bar.com
 
 ## Logging
 
-By default, zipkin writes log messages to the console at INFO level and above. You can adjust categories using the `--logging.level.XXX` parameter, a `-Dlogging.level.XXX` system property, or by adjusting [yaml configuration](src/main/resources/zipkin-server.yml).
+By default, zipkin writes log messages to the console at INFO level and above. You can adjust categories using the `--logging.level.XXX` parameter, a `-Dlogging.level.XXX` system property, or by adjusting [yaml configuration](src/main/resources/zipkin-server-shared.yml).
 
 For example, if you want to enable debug logging for all zipkin categories, you can start the server like so:
 
@@ -81,7 +81,7 @@ who enable self-tracing should lower the sample rate from 1.0 (100%) to a much s
 When Brave dependencies are in the classpath, and `zipkin.self-tracing.enabled=true`,
 Zipkin will self-trace calls to the api.
 
-[yaml configuration](src/main/resources/zipkin-server.yml) binds the following environment variables to spring properties:
+[yaml configuration](src/main/resources/zipkin-server-shared.yml) binds the following environment variables to spring properties:
 
 Variable | Property | Description
 --- | --- | ---
@@ -100,13 +100,14 @@ environment | zipkin.ui.environment | The value here becomes a label in the top-
 defaultLookback | zipkin.ui.default-lookback | Default duration in millis to look back when finding traces. Affects the "Start time" element in the UI. Defaults to 3600000 (1 hour in millis).
 queryLimit | zipkin.ui.query-limit | Default limit for Find Traces. Defaults to 10.
 instrumented | zipkin.ui.instrumented | Which sites this Zipkin UI covers. Regex syntax. e.g. `http:\/\/example.com\/.*` Defaults to match all websites (`.*`).
+logsUrl | zipkin.ui.logs-url | Logs query service url pattern. If specified, a button will appear on the trace page and will replace {traceId} in the url by the traceId. Not required.
 
 For example, if using docker you can set `ZIPKIN_UI_QUERY_LIMIT=100` to affect `$.queryLimit` in `/config.json`.
 
 ## Environment Variables
 zipkin-server is a drop-in replacement for the [scala query service](https://github.com/openzipkin/zipkin/tree/scala/zipkin-query-service).
 
-[yaml configuration](src/main/resources/zipkin-server.yml) binds the following environment variables from zipkin-scala:
+[yaml configuration](src/main/resources/zipkin-server-shared.yml) binds the following environment variables from zipkin-scala:
 
     * `QUERY_PORT`: Listen port for the http api and web ui; Defaults to 9411
     * `QUERY_LOG_LEVEL`: Log level written to the console; Defaults to INFO
@@ -155,6 +156,13 @@ $ STORAGE_TYPE=mysql MYSQL_USER=root java -jar zipkin.jar
 ```
 
 ### Elasticsearch Storage
+Zipkin's [Elasticsearch storage component](../zipkin-storage/elasticsearch)
+supports version 2.x and applies when `STORAGE_TYPE` is set to `elasticsearch`
+
+When the value of `ES_HOSTS` includes an Http URL (ex http://elasticsearch:9200),
+Zipkin's [Elasticsearch Http storage component](../zipkin-storage/elasticsearch-http)
+is used, which supports versions 2.x and 5.x.
+
 The following apply when `STORAGE_TYPE` is set to `elasticsearch`:
 
     * `ES_CLUSTER`: The name of the elasticsearch cluster to connect to. Defaults to "elasticsearch".
@@ -170,12 +178,15 @@ The following apply when `STORAGE_TYPE` is set to `elasticsearch`:
                   files, or ec2 profiles) to sign outbound requests to the cluster.
     * `ES_PIPELINE`: Only valid when the destination is Elasticsearch 5.x. Indicates the ingest
                      pipeline used before spans are indexed. No default.
-    * `ES_AWS_DOMAIN`: The name of the AWS-hosted elasticsearch domain to use. Supercedes any set 
+    * `ES_MAX_REQUESTS`: Only valid when the transport is http. Sets maximum in-flight requests from
+                         this process to any Elasticsearch host. Defaults to 64.
+    * `ES_AWS_DOMAIN`: The name of the AWS-hosted elasticsearch domain to use. Supercedes any set
                        `ES_HOSTS`. Triggers the same request signing behavior as with `ES_HOSTS`, but
                        requires the additional IAM permission to describe the given domain.
     * `ES_AWS_REGION`: An optional override to the default region lookup to search for the domain
                        given in `ES_AWS_DOMAIN`. Ignored if only `ES_HOSTS` is present.
     * `ES_INDEX`: The index prefix to use when generating daily index names. Defaults to zipkin.
+    * `ES_DATE_SEPARATOR`: The date separator to use when generating daily index names. Defaults to '-'.
     * `ES_INDEX_SHARDS`: The number of shards to split the index into. Each shard and its replicas
                          are assigned to a machine in the cluster. Increasing the number of shards
                          and machines in the cluster will improve read and write performance. Number
@@ -209,6 +220,13 @@ $ STORAGE_TYPE=elasticsearch ES_HOSTS=https://search-mydomain-2rlih66ibw43ftlk43
 # Or you can have zipkin implicitly lookup your domain's URL
 $ STORAGE_TYPE=elasticsearch ES_AWS_DOMAIN=mydomain ES_AWS_REGION=ap-southeast-1 java -jar zipkin.jar
 ```
+
+#### Service and Span names query
+The [Zipkin query api v1](http://zipkin.io/zipkin-api/#/paths/%252Fservices) does not include
+a parameter for how far back to look for service or span names. In order
+to prevent excessive load, service and span name queries are limited by
+`QUERY_LOOKBACK`, which defaults to 24hrs (two daily buckets: one for
+today and one for yesterday)
 
 ### Scribe Collector
 The Scribe collector is enabled by default, configured by the following:
@@ -249,6 +267,19 @@ $ docker run -d -p 2181:2181 -p 9092:9092 \
     spotify/kafka
 # Start the zipkin server, which reads $KAFKA_ZOOKEEPER
 $ java -jar zipkin.jar
+```
+
+#### Overriding other properties
+You may need to override other consumer properties than what zipkin
+explicitly defines. In such case, you need to prefix that property name
+with "zipkin.collector.kafka.overrides" and pass it as a CLI argument or
+system property.
+
+For example, to override "overrides.auto.offset.reset", you can set a
+prefixed system property:
+
+```bash
+$ KAFKA_ZOOKEEPER=127.0.0.1:2181 java -Dzipkin.collector.kafka.overrides.auto.offset.reset=largest -jar zipkin.jar
 ```
 
 ### 128-bit trace IDs
